@@ -299,6 +299,29 @@ def _format_tuition_recheck(fee_rows):
     return "Em đã kiểm tra lại thông tin học phí:\n" + "\n".join(lines)
 
 
+def _format_grades_recheck(grades):
+    if not grades:
+        return "Hiện em chưa thấy dữ liệu điểm phù hợp trong hệ thống để đối chiếu lại."
+
+    lines = []
+    for grade in grades[:5]:
+        lines.append(
+            f"- {grade.get('subject')}: {grade.get('score')} điểm ({grade.get('type')}) | Cập nhật: {grade.get('updated_at')}"
+        )
+    return "Em đã kiểm tra lại dữ liệu điểm hiện có:\n" + "\n".join(lines)
+
+
+def _format_attendance_recheck(attendance_rows):
+    if not attendance_rows:
+        return "Hiện em chưa thấy dữ liệu chuyên cần phù hợp trong hệ thống để đối chiếu lại."
+
+    lines = []
+    for row in attendance_rows[:5]:
+        lines.append(
+            f"- {row.get('date')}: {row.get('status')} | Cập nhật: {row.get('updated_at')}"
+        )
+    return "Em đã kiểm tra lại dữ liệu điểm danh/chuyên cần:\n" + "\n".join(lines)
+
 def _format_summary_recheck(summary_data):
     grades = summary_data.get("grades", []) if isinstance(summary_data, dict) else []
     attendance = summary_data.get("attendance", []) if isinstance(summary_data, dict) else []
