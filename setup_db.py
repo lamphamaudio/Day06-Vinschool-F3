@@ -1,11 +1,8 @@
 import psycopg2
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
+from src.config import get_env
 
 def setup_database():
-    db_url = os.getenv("DATABASE_URL")
+    db_url = get_env("DATABASE_URL")
     if not db_url:
         print("Error: DATABASE_URL not found in .env")
         return
