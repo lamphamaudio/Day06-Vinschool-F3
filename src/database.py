@@ -2,19 +2,13 @@ import streamlit as st
 import psycopg2
 from psycopg2.extras import DictCursor
 import psycopg2.pool
-import os
 from datetime import datetime
-from dotenv import load_dotenv
-
-load_dotenv()
+from config import get_env
 
 @st.cache_resource
 def get_db_pool():
-    try:
-        db_url = st.secrets["DATABASE_URL"]
-    except:
-        db_url = os.getenv("DATABASE_URL")
-        
+    db_url = get_env("DATABASE_URL")
+
     if not db_url:
         raise ValueError("DATABASE_URL không được tìm thấy")
         

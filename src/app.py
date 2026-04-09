@@ -3,7 +3,7 @@ import psycopg2.errors
 from database import authenticate_parent, get_student_info
 from agent import call_ai_agent
 import time
-import os
+from config import get_env
 
 st.set_page_config(page_title="Hỗ trợ Phụ huynh - VinSchool/VinUni", page_icon="🏫", layout="centered")
 
@@ -21,12 +21,7 @@ if "logged_in" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
-if "api_key" not in st.session_state:
-    # Lấy key từ secrets để tuân thủ bảo mật
-    try:
-        st.session_state["api_key"] = st.secrets["OPENAI_API_KEY"]
-    except:
-        st.session_state["api_key"] = os.getenv("OPENAI_API_KEY", "")
+openai_api_key = get_env("OPENAI_API_KEY")
 
 def login_page():
     st.title("🏫 Hệ thống Hỗ trợ Phụ huynh")
@@ -68,8 +63,11 @@ def chat_page():
         st.markdown(f"**Phụ huynh:** {parent_name}")
         st.markdown(f"**Học sinh:** {student.get('full_name')} - Lớp: {student.get('class_name')}")
         st.divider()
-        
-        st.session_state["api_key"] = st.text_input("Mã API OpenAI", type="password", value=st.session_state.get("api_key", ""))
+
+        if openai_api_key:
+            st.caption("OPENAI_API_KEY đã được nạp từ file `.env`.")
+        else:
+            st.warning("Thiếu `OPENAI_API_KEY` trong file `.env`.")
         
         if st.button("Đăng xuất"):
             st.session_state["logged_in"] = False
@@ -86,8 +84,8 @@ def chat_page():
             st.markdown(msg["content"])
             
     if prompt := st.chat_input("Hỏi AI về khóa học, điểm số, hoặc nhận xét..."):
-        if not st.session_state["api_key"]:
-            st.error("Vui lòng nhập Mã API OpenAI trong menu Cài đặt (Bên trái) trước khi hỏi.")
+        if not openai_api_key:
+            st.error("Thiếu `OPENAI_API_KEY` trong file `.env`, vui lòng cập nhật cấu hình rồi chạy lại ứng dụng.")
             return
             
         st.session_state["messages"].append({"role": "user", "content": prompt})
@@ -99,7 +97,7 @@ def chat_page():
             with st.spinner("Đang tra cứu cơ sở dữ liệu..."):
                 try:
                     response = call_ai_agent(
-                        api_key=st.session_state["api_key"],
+                        api_key=openai_api_key,
                         query=prompt,
                         session_state=st.session_state
                     )
