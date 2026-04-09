@@ -6,17 +6,17 @@ import database
 
 @tool
 def get_student_schedule(class_id: str, day_of_week: str = None):
-    """Tra cứu thời khóa biểu của lớp học, bao gồm thứ, tiết học, khung giờ và phòng học. day_of_week có thể là 'Thứ 2' đến 'Thứ 7'."""
+    """Trả về thời khóa biểu của một lớp học theo mã lớp, gồm thứ trong tuần, tiết học, khung giờ và phòng học. Tham số day_of_week nhận giá trị từ 'Thứ 2' đến 'Thứ 7'."""
     return database.get_schedule(class_id, day_of_week)
 
 @tool
 def get_student_grades(student_id: str):
-    """Tra cứu bảng điểm và kết quả học tập của học sinh."""
+    """Trả về bảng điểm và kết quả học tập của học sinh theo mã học sinh."""
     return database.get_grades(student_id)
 
 @tool
 def get_attendance_records(student_id: str):
-    """Tra cứu lịch sử điểm danh và sự chuyên cần của học sinh."""
+    """Trả về lịch sử điểm danh và mức độ chuyên cần của học sinh theo mã học sinh."""
     return database.get_attendance(student_id)
 
 @tool
