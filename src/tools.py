@@ -6,7 +6,7 @@ import database
 
 @tool
 def get_student_schedule(class_id: str, day_of_week: str = None):
-    """Tra cứu thời khóa biểu của lớp học. day_of_week có thể là 'Thứ 2' đến 'Thứ 7'."""
+    """Tra cứu thời khóa biểu của lớp học, bao gồm thứ, tiết học, khung giờ và phòng học. day_of_week có thể là 'Thứ 2' đến 'Thứ 7'."""
     return database.get_schedule(class_id, day_of_week)
 
 @tool
@@ -21,7 +21,7 @@ def get_attendance_records(student_id: str):
 
 @tool
 def get_school_announcements(class_id: str = None):
-    """Lấy các thông báo mới từ nhà trường và giáo viên."""
+    """Lấy các thông báo, sự kiện mới từ nhà trường và giáo viên, bao gồm thời điểm đăng và thời gian hiệu lực nếu có."""
     return database.get_announcements(class_id)
 
 @tool
@@ -37,6 +37,7 @@ def get_academic_summary(student_id: str):
 @tool
 def report_issue_to_teacher(parent_id: str, student_id: str, issue_description: str, category: str = "general_support"):
     """Gửi phản hồi, khiếu nại hoặc yêu cầu hỗ trợ tới giáo viên/nhà trường. 
+    Chỉ dùng khi phụ huynh muốn nhà trường tiếp nhận phản ánh/chủ động hỗ trợ tiếp.
     Category có thể là: 'wrong_information', 'academic_concern', 'fee_issue', 'general_support'."""
     return database.create_support_ticket(student_id, parent_id, issue_description, category)
 
@@ -47,7 +48,8 @@ def get_teacher_comments(student_id: str, limit: int = 5):
 
 @tool
 def get_teacher_contact_info(class_id: str):
-    """Lấy thông tin liên hệ chính thức (SĐT, Email, Tên) của giáo viên chủ nhiệm khi phụ huynh cần liên lạc."""
+    """Lấy thông tin liên hệ chính thức (SĐT, Email, Tên) của giáo viên chủ nhiệm.
+    Dùng sau khi đã kiểm tra lại dữ liệu mà phụ huynh vẫn thấy câu trả lời sai, chưa rõ hoặc cần xác minh trực tiếp."""
     return database.get_teacher_contact_info(class_id)
 
 @tool

@@ -5,6 +5,28 @@ import psycopg2.pool
 from datetime import datetime
 from config import get_env
 
+
+PERIOD_TIME_RANGES = {
+    1: "07:30 - 08:15",
+    2: "08:25 - 09:10",
+    3: "09:20 - 10:05",
+    4: "10:15 - 11:00",
+    5: "13:30 - 14:15",
+    6: "14:25 - 15:10",
+    7: "15:20 - 16:05",
+    8: "16:15 - 17:00",
+}
+
+DAY_OF_WEEK_LABELS = {
+    1: "Thứ 2",
+    2: "Thứ 3",
+    3: "Thứ 4",
+    4: "Thứ 5",
+    5: "Thứ 6",
+    6: "Thứ 7",
+    7: "Chủ Nhật",
+}
+
 @st.cache_resource
 def get_db_pool():
     db_url = get_env("DATABASE_URL")
@@ -77,7 +99,7 @@ def get_schedule(class_id, day_of_week=None):
         day_val = day_map.get(day_of_week, 4)
 
     query = """
-    SELECT s.period_no as period, sub.subject_name as subject, t.full_name as teacher_name
+    SELECT s.day_of_week, s.period_no as period, s.room_name, sub.subject_name as subject, t.full_name as teacher_name
     FROM schedules s
     JOIN subjects sub ON s.subject_id = sub.id
     JOIN teachers t ON s.teacher_id = t.id
@@ -85,7 +107,13 @@ def get_schedule(class_id, day_of_week=None):
     ORDER BY s.period_no
     """
     rows = _execute_query(query, (class_id, day_val))
-    return [dict(row) for row in rows]
+    result = []
+    for row in rows:
+        d = dict(row)
+        d["day_of_week_text"] = DAY_OF_WEEK_LABELS.get(d["day_of_week"], f"Thứ {d['day_of_week']}")
+        d["time_range"] = PERIOD_TIME_RANGES.get(d["period"], "Chưa có khung giờ")
+        result.append(d)
+    return result
 
 def get_grades(student_id):
     query = """
@@ -122,12 +150,25 @@ def get_attendance(student_id):
 
 def get_announcements(class_id=None):
     # Lấy thông báo chung hoặc theo lớp
-    query = "SELECT title, content, published_at as date FROM school_announcements ORDER BY published_at DESC LIMIT 5"
+    query = """
+    SELECT
+        title,
+        content,
+        category,
+        published_at as date,
+        effective_from,
+        effective_to
+    FROM school_announcements
+    ORDER BY published_at DESC
+    LIMIT 5
+    """
     rows = _execute_query(query, ())
     result = []
     for row in rows:
         d = dict(row)
         d['date'] = d['date'].isoformat() # Consistent
+        d['effective_from'] = d['effective_from'].isoformat() if d.get('effective_from') else None
+        d['effective_to'] = d['effective_to'].isoformat() if d.get('effective_to') else None
         d['link'] = "#" # Placeholder
         result.append(d)
     return result
