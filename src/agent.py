@@ -60,7 +60,7 @@ def classify_intent_cached(api_key, query):
         print(f"Intent Error: {e}")
         return "ERROR"
 
-def extract_db_context_and_direct_format(intent, student_id, class_name, student_name):
+def extract_db_context_and_direct_format(intent, student_id, class_id, class_name, student_name):
     """
     Kéo data và Nếu thuộc nhóm Câu hỏi đơn giản: SQL trực tiếp tạo response KHÔNG CẦN gọi LLM
     """
@@ -76,7 +76,7 @@ def extract_db_context_and_direct_format(intent, student_id, class_name, student
     direct_response = None
     
     if intent == "SCHEDULE":
-        schedule = get_schedule(class_name)
+        schedule = get_schedule(class_id)
         for s in schedule:
             context_lines.append(f"- Tiết {s['period']} | Môn: {s['subject']} | GV: {s['teacher_name']}")
         data_sources.append("schedule")
@@ -85,10 +85,10 @@ def extract_db_context_and_direct_format(intent, student_id, class_name, student
     elif intent == "GRADES":
         grades = get_grades(student_id)
         for g in grades:
-            stale = check_stale(g['updated_at'], 24)
+            stale = check_stale(str(g['updated_at']), 24)
             warn = " *(CẢNH BÁO: Dữ liệu chưa đồng bộ >24h)*" if stale else ""
             context_lines.append(f"- **Môn {g['subject']}**: {g['score']} điểm ({g['type']}) | Cập nhật: {g['updated_at']}{warn}")
-            data_timestamps.append(g['updated_at'])
+            data_timestamps.append(str(g['updated_at']))
         data_sources.append("grades")
         # Direct SQL answer bypass LLM
         direct_response = common_header + "📊 **Điểm số cập nhật**:\n" + "\n".join(context_lines) + common_footer
@@ -96,10 +96,10 @@ def extract_db_context_and_direct_format(intent, student_id, class_name, student
     elif intent == "ATTENDANCE":
         attendance = get_attendance(student_id)
         for a in attendance:
-            stale = check_stale(a['updated_at'], 1)
+            stale = check_stale(str(a['updated_at']), 1)
             warn = " *(CẢNH BÁO: Dữ liệu bị delay >1h)*" if stale else ""
             context_lines.append(f"- Ngày {a['date']}: **{a['status']}** | Cập nhật: {a['updated_at']}{warn}")
-            data_timestamps.append(a['updated_at'])
+            data_timestamps.append(str(a['updated_at']))
         data_sources.append("attendance")
         direct_response = common_header + "✋ **Tình trạng chuyên cần**:\n" + "\n".join(context_lines) + common_footer
 
@@ -111,7 +111,7 @@ def extract_db_context_and_direct_format(intent, student_id, class_name, student
         direct_response = common_header + "💳 **Tình trạng học phí**:\n" + "\n".join(context_lines) + "\n\n_Vui lòng thanh toán qua cổng nhà trường theo đường dẫn gửi kèm Email._" + common_footer
             
     elif intent == "NOTIFICATION":
-        announcements = get_announcements(class_name)
+        announcements = get_announcements(class_id)
         for ann in announcements:
             stale = check_stale(ann['date'], 1)
             warn = " *(CẢNH BÁO: Notification delay >1h)*" if stale else ""
@@ -137,6 +137,7 @@ def call_ai_agent(api_key, query, session_state):
     
     student = student_data_meta.get("student", {})
     student_id = student.get("student_id")
+    class_id = student.get("class_id") # NEW: uses class_id UUID
     class_name = student.get("class_name")
     student_name = student.get("full_name", "N/A")
     parent_id = parent_info.get("parent_id")
@@ -153,7 +154,7 @@ def call_ai_agent(api_key, query, session_state):
             raise Exception("Intent classification failed or timed out.")
             
         # 3. EXTRACTION AND BYPASS EVALUATION
-        db_context, data_sources, data_timestamps, direct_response = extract_db_context_and_direct_format(intent, student_id, class_name, student_name)
+        db_context, data_sources, data_timestamps, direct_response = extract_db_context_and_direct_format(intent, student_id, class_id, class_name, student_name)
         
         # 4. LLM GENERATION OR DIRECT RETURN (CHỐNG LÃNG PHÍ INFERENCE COST THEO YÊU CẦU DEPLOYMENT)
         if direct_response and intent in ["SCHEDULE", "GRADES", "ATTENDANCE", "TUITION", "NOTIFICATION"]:

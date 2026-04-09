@@ -33,7 +33,7 @@ def login_page():
     st.markdown("Vui lòng đăng nhập để tra cứu thông tin học tập của con (Hỗ trợ 24/7).")
     
     with st.form("login_form"):
-        username = st.text_input("Tên đăng nhập")
+        username = st.text_input("Mã phụ huynh hoặc Email")
         password = st.text_input("Mật khẩu", type="password")
         submitted = st.form_submit_button("Đăng nhập")
         
@@ -57,7 +57,7 @@ def login_page():
             except Exception as e:
                 st.error(f"Lỗi hệ thống: {e}")
     
-    st.info("💡 Mẹo: Dùng tài khoản mẫu `phuhuynhA` / pass: `123456`")
+    st.info("💡 Mẹo: Dùng tài khoản mẫu `parentA@example.com` hoặc `PH001` / pass: `123456`")
 
 def chat_page():
     parent_name = st.session_state["parent_info"]["parent_name"]

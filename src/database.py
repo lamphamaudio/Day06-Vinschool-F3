@@ -19,7 +19,8 @@ def get_db_pool():
         raise ValueError("DATABASE_URL không được tìm thấy")
         
     # Tạo pool tối ưu connection timeout
-    return psycopg2.pool.SimpleConnectionPool(1, 10, db_url, connect_timeout=5, options='-c statement_timeout=8000')
+    # Set search_path to school_ai for all connections in the pool
+    return psycopg2.pool.SimpleConnectionPool(1, 10, db_url, connect_timeout=5, options='-c search_path=school_ai,public -c statement_timeout=8000')
 
 def get_connection():
     pool = get_db_pool()
@@ -44,85 +45,158 @@ def _execute_query(query, params, fetch_one=False, commit=False):
             result = cursor.fetchone() if fetch_one else cursor.fetchall()
         cursor.close()
         return result
-    except psycopg2.errors.OperationalError as e:
-        if commit: conn.rollback()
-        raise e
     except Exception as e:
         if commit: conn.rollback()
         raise e
     finally:
          return_connection(conn)
 
-# CÁC HÀM GET DỮ LIỆU TÁCH RỜI / FETCH THEO INTENT KHÔNG TẢI TOÀN BỘ DATA
-def authenticate_parent(username, password):
-    parent = _execute_query("SELECT parent_id, full_name FROM parents WHERE username = %s AND password = %s", (username, password), fetch_one=True)
-    student_id = None
+# CÁC HÀM GET DỮ LIỆU ĐÃ CẬP NHẬT THEO SCHEMA school_ai
+def authenticate_parent(login_identifier, password):
+    # Tìm parent theo email hoặc parent_code (thay cho username)
+    query = "SELECT id, full_name FROM parents WHERE (email = %s OR parent_code = %s) AND password_hash = %s"
+    parent = _execute_query(query, (login_identifier, login_identifier, password), fetch_one=True)
+    
     if parent:
-        mapping = _execute_query("SELECT student_id FROM parent_student_mapping WHERE parent_id = %s", (parent['parent_id'],), fetch_one=True)
+        # Lấy student_id đầu tiên (mặc định) liên kết với parent này
+        mapping = _execute_query("SELECT student_id FROM parent_student_links WHERE parent_id = %s LIMIT 1", (parent['id'],), fetch_one=True)
         if mapping:
-            student_id = mapping['student_id']
-    if student_id:
-        return {"parent_id": parent['parent_id'], "parent_name": parent['full_name'], "student_id": student_id}
+            return {"parent_id": str(parent['id']), "parent_name": parent['full_name'], "student_id": str(mapping['student_id'])}
     return None
 
 def get_student_info(student_id):
-    student = _execute_query("SELECT * FROM students WHERE student_id = %s", (student_id,), fetch_one=True)
+    query = """
+    SELECT s.id as student_id, s.full_name, s.student_code, c.class_name, c.id as class_id
+    FROM students s
+    JOIN classes c ON s.class_id = c.id
+    WHERE s.id = %s
+    """
+    student = _execute_query(query, (student_id,), fetch_one=True)
     return dict(student) if student else {}
 
-def get_schedule(class_name, day_of_week=None):
-    if not day_of_week: day_of_week = 'Thứ 5' # Mock
-    rows = _execute_query("SELECT * FROM schedule WHERE class_name = %s AND day_of_week = %s ORDER BY period", (class_name, day_of_week))
+def get_schedule(class_id, day_of_week=None):
+    # day_of_week mapping from Vietnamese string to SMALLINT (1-7)
+    day_map = {'Thứ 2': 1, 'Thứ 3': 2, 'Thứ 4': 3, 'Thứ 5': 4, 'Thứ 6': 5, 'Thứ 7': 6, 'Chủ Nhật': 7}
+    if not day_of_week: 
+        day_val = 4 # Mock Thứ 5
+    else:
+        day_val = day_map.get(day_of_week, 4)
+
+    query = """
+    SELECT s.period_no as period, sub.subject_name as subject, t.full_name as teacher_name
+    FROM schedules s
+    JOIN subjects sub ON s.subject_id = sub.id
+    JOIN teachers t ON s.teacher_id = t.id
+    WHERE s.class_id = %s AND s.day_of_week = %s
+    ORDER BY s.period_no
+    """
+    rows = _execute_query(query, (class_id, day_val))
     return [dict(row) for row in rows]
 
 def get_grades(student_id):
-    rows = _execute_query("SELECT * FROM grades WHERE student_id = %s ORDER BY updated_at DESC", (student_id,))
-    return [dict(row) for row in rows]
+    query = """
+    SELECT sub.subject_name as subject, g.score, g.assessment_name as type, g.recorded_at as updated_at
+    FROM grade_records g
+    JOIN subjects sub ON g.subject_id = sub.id
+    WHERE g.student_id = %s
+    ORDER BY g.recorded_at DESC
+    """
+    rows = _execute_query(query, (student_id,))
+    result = []
+    for row in rows:
+        d = dict(row)
+        d['updated_at'] = d['updated_at'].isoformat()
+        result.append(d)
+    return result
 
 def get_attendance(student_id):
-    rows = _execute_query("SELECT * FROM attendance WHERE student_id = %s ORDER BY date DESC", (student_id,))
-    return [dict(row) for row in rows]
+    query = """
+    SELECT attendance_date as date, status, created_at as updated_at
+    FROM attendance_records
+    WHERE student_id = %s
+    ORDER BY attendance_date DESC
+    """
+    rows = _execute_query(query, (student_id,))
+    # Format date to string to match agent.py expectation if needed
+    result = []
+    for row in rows:
+        d = dict(row)
+        d['date'] = d['date'].strftime("%Y-%m-%d")
+        d['updated_at'] = d['updated_at'].isoformat()
+        result.append(d)
+    return result
 
-def get_announcements(class_name):
-    rows = _execute_query("SELECT * FROM announcements WHERE class_name = %s ORDER BY date DESC", (class_name,))
-    return [dict(row) for row in rows]
+def get_announcements(class_id=None):
+    # Lấy thông báo chung hoặc theo lớp
+    query = "SELECT title, content, published_at as date FROM school_announcements ORDER BY published_at DESC LIMIT 5"
+    rows = _execute_query(query, ())
+    result = []
+    for row in rows:
+        d = dict(row)
+        d['date'] = d['date'].isoformat() # Consistent
+        d['link'] = "#" # Placeholder
+        result.append(d)
+    return result
 
 def get_summary_context(student_id):
-    grades = [dict(row) for row in _execute_query("SELECT subject, score, updated_at FROM grades WHERE student_id = %s", (student_id,))]
-    attendance = [dict(row) for row in _execute_query("SELECT status, date FROM attendance WHERE student_id = %s LIMIT 10", (student_id,))]
-    comments = [dict(row) for row in _execute_query("SELECT teacher_name, subject, comment FROM comments WHERE student_id = %s", (student_id,))]
+    grades = get_grades(student_id)
+    attendance = get_attendance(student_id)
+    # Lấy thêm comment của giáo viên từ bảng teacher_daily_comments
+    comments_rows = _execute_query("SELECT comment_text as comment, t.full_name as teacher_name FROM teacher_daily_comments c JOIN teachers t ON c.teacher_id = t.id WHERE student_id = %s", (student_id,))
+    comments = [dict(row) for row in comments_rows]
     return {"grades": grades, "attendance": attendance, "comments": comments}
 
 def get_tuition(student_id):
-    rows = _execute_query("SELECT fee_name, amount, due_date, status FROM tuition WHERE student_id = %s", (student_id,))
-    return [dict(row) for row in rows]
+    query = "SELECT fee_name, amount, due_date, status FROM fee_records WHERE student_id = %s"
+    rows = _execute_query(query, (student_id,))
+    result = []
+    for row in rows:
+        d = dict(row)
+        d['due_date'] = d['due_date'].strftime("%Y-%m-%d") if d['due_date'] else "N/A"
+        result.append(d)
+    return result
 
-def create_support_ticket(student_id, issue, recipient):
-    created_at = datetime.now().isoformat()
-    # Dùng query thủ công cho returning
-    conn = get_connection()
-    try:
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO support_tickets (student_id, issue, recipient, status, created_at) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                        (student_id, issue, recipient, "Open", created_at))
-        ticket_id = cursor.fetchone()[0]
-        conn.commit()
-        cursor.close()
-        return ticket_id
-    except:
-        conn.rollback()
-        raise
-    finally:
-        return_connection(conn)
+def create_support_ticket(student_id, parent_id, issue, category="general_support"):
+    query = """
+    INSERT INTO support_tickets (ticket_code, parent_id, student_id, category, title, description, status)
+    VALUES (%s, %s, %s, %s, %s, %s, %s)
+    RETURNING id
+    """
+    ticket_code = f"TK-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    title = f"Hỗ trợ: {issue[:30]}..."
+    result = _execute_query(query, (ticket_code, parent_id, student_id, category, title, issue, "open"), fetch_one=True, commit=True)
+    return result[0] if result else None
 
 def insert_conversation_log(session_id, student_id, parent_id, intent_detected, user_message, ai_response, data_sources, data_timestamps, escalated=False, correction_flagged=False):
-    timestamp = datetime.now().isoformat()
+    import json
+    import uuid
+    
+    # Chuẩn hóa session_id thành UUID
+    try:
+        uuid.UUID(str(session_id))
+        final_session_id = str(session_id)
+    except:
+        final_session_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(session_id)))
+
     conn = get_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO conversation_log (session_id, student_id, parent_id, timestamp, intent_detected, user_message, ai_response, data_sources, data_timestamps, escalated, correction_flagged) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (session_id, student_id, parent_id, timestamp, intent_detected, user_message, ai_response, str(data_sources), str(data_timestamps), escalated, correction_flagged)
-        )
+        
+        # 1. Đảm bảo session tồn tại trong chat_sessions (vì có khóa ngoại)
+        cursor.execute("SELECT id FROM chat_sessions WHERE id = %s", (final_session_id,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO chat_sessions (id, parent_id, student_id) VALUES (%s, %s, %s)",
+                (final_session_id, parent_id, student_id)
+            )
+            
+        # 2. Log vào ai_audit_logs
+        query = """
+        INSERT INTO ai_audit_logs (session_id, parent_id, student_id, question_text, answer_text, intent_name, data_sources, was_escalated)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        cursor.execute(query, (final_session_id, parent_id, student_id, user_message, ai_response, intent_detected, json.dumps(data_sources), escalated))
+        
         conn.commit()
         cursor.close()
     except Exception as e:
