@@ -1,11 +1,21 @@
+import warnings
+import os
+import logging
+
+# 1. CHẶN LOG NGAY LẬP TỨC TRƯỚC KHI IMPORT BẤT CỨ THỨ GÌ KHÁC
+warnings.filterwarnings("ignore")
+os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["PYTHONWARNINGS"] = "ignore"
+
+# Chặn log từ module logging
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("langchain").setLevel(logging.ERROR)
+
 import streamlit as st
 import psycopg2.errors
 from database import authenticate_parent, get_student_info
 from agent_langchain import call_langchain_agent
 import time
-import os
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning)
 
 st.set_page_config(page_title="Hỗ trợ Phụ huynh - VinSchool/VinUni", page_icon="🏫", layout="centered")
 
@@ -23,7 +33,8 @@ if "logged_in" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 
-openai_api_key = get_env("OPENAI_API_KEY")
+# Lấy KEY từ file .env
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
 def login_page():
     st.title("🏫 Hệ thống Hỗ trợ Phụ huynh")
@@ -67,9 +78,9 @@ def chat_page():
         st.divider()
 
         if openai_api_key:
-            st.caption("OPENAI_API_KEY đã được nạp từ file `.env`.")
+            st.caption("✅ OPENAI_API_KEY đã được nạp.")
         else:
-            st.warning("Thiếu `OPENAI_API_KEY` trong file `.env`.")
+            st.warning("⚠️ Thiếu `OPENAI_API_KEY` trong file `.env`.")
         
         if st.button("Đăng xuất"):
             st.session_state["logged_in"] = False
@@ -87,7 +98,7 @@ def chat_page():
             
     if prompt := st.chat_input("Hỏi AI về khóa học, điểm số, hoặc nhận xét..."):
         if not openai_api_key:
-            st.error("Thiếu `OPENAI_API_KEY` trong file `.env`, vui lòng cập nhật cấu hình rồi chạy lại ứng dụng.")
+            st.error("Thiếu `OPENAI_API_KEY` trong file `.env`.")
             return
             
         st.session_state["messages"].append({"role": "user", "content": prompt})
@@ -99,7 +110,7 @@ def chat_page():
             with st.spinner("Đang tra cứu cơ sở dữ liệu..."):
                 try:
                     response = call_langchain_agent(
-                        api_key=st.session_state["api_key"],
+                        api_key=openai_api_key,
                         query=prompt,
                         session_state=st.session_state
                     )
@@ -113,7 +124,7 @@ def chat_page():
                     message_placeholder.markdown(full_response)
                         
                 except psycopg2.errors.OperationalError:
-                     st.warning("Hệ thống Database đang khởi động lại (Cold Start), vui lòng chờ 10-15 giây...")
+                     st.warning("Hệ thống Database đang khởi động lại (Cold Start)...")
                      if st.button("Thử lại truy vấn"): st.rerun()
                      return
                 
