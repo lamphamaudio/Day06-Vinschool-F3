@@ -4,7 +4,8 @@ import re
 import unicodedata
 from functools import lru_cache
 from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.agents.agent import AgentExecutor
+from langchain.agents.tool_calling_agent.base import create_tool_calling_agent
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
@@ -474,26 +475,26 @@ def get_langchain_agent_executor(api_key):
     prompt = ChatPromptTemplate.from_messages([
         ("system", """{base_system_prompt}
 
-Dưới đây là thông tin bảo mật về con của phụ huynh đang chat với bạn.
-LƯU Ý QUAN TRỌNG: nếu phụ huynh nhắc đến "con tôi", "cháu" hoặc không ghi rõ tên, hãy hiểu là đang hỏi về học sinh này.
+    Dưới đây là thông tin bảo mật về con của phụ huynh đang chat với bạn.
+    LƯU Ý QUAN TRỌNG: nếu phụ huynh nhắc đến "con tôi", "cháu" hoặc không ghi rõ tên, hãy hiểu là đang hỏi về học sinh này.
 
-- Tên học sinh: {student_name}
-- Lớp: {class_name}
-- Student ID: {student_id}
-- Class ID: {class_id}
-- Parent ID: {parent_id}
+    - Tên học sinh: {student_name}
+    - Lớp: {class_name}
+    - Student ID: {student_id}
+    - Class ID: {class_id}
+    - Parent ID: {parent_id}
 
-Ràng buộc cho flow hiện tại:
-1. Tự động dùng các ID ở trên để gọi tool, không hỏi lại các ID này.
-2. Chỉ trả lời trong phạm vi học sinh gắn với phiên đăng nhập hiện tại.
-3. Nếu phụ huynh cố tình hỏi sang một học sinh khác, phải từ chối lịch sự để bảo vệ dữ liệu.
-4. Có thể gọi liên tiếp nhiều tool nếu cần, nhưng chỉ kết luận những gì có trong dữ liệu.
-5. Với lịch học, thông báo, sự kiện hoặc mốc thời gian học tập, phải nêu rõ thời gian nếu tool có cung cấp.
-6. Với học phí, đặt lịch, phản ánh hoặc hỗ trợ, chỉ hướng dẫn và xác nhận bước tiếp theo; không được giả định giao dịch cuối cùng đã hoàn tất nếu dữ liệu chưa xác nhận.
+    Ràng buộc cho flow hiện tại:
+    1. Tự động dùng các ID ở trên để gọi tool, không hỏi lại các ID này.
+    2. Chỉ trả lời trong phạm vi học sinh gắn với phiên đăng nhập hiện tại.
+    3. Nếu phụ huynh cố tình hỏi sang một học sinh khác, phải từ chối lịch sự để bảo vệ dữ liệu.
+    4. Có thể gọi liên tiếp nhiều tool nếu cần, nhưng chỉ kết luận những gì có trong dữ liệu.
+    5. Với lịch học, thông báo, sự kiện hoặc mốc thời gian học tập, phải nêu rõ thời gian nếu tool có cung cấp.
+    6. Với học phí, đặt lịch, phản ánh hoặc hỗ trợ, chỉ hướng dẫn và xác nhận bước tiếp theo; không được giả định giao dịch cuối cùng đã hoàn tất nếu dữ liệu chưa xác nhận.
 
-Chỉ dẫn theo ngữ cảnh:
-{follow_up_guidance}
-"""),
+    Chỉ dẫn theo ngữ cảnh:
+    {follow_up_guidance}
+    """),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
