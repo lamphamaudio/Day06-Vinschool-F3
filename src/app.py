@@ -106,27 +106,32 @@ def chat_page():
             st.markdown(prompt)
             
         with st.chat_message("assistant"):
+            status_placeholder = st.empty()
             message_placeholder = st.empty()
-            with st.spinner("Đang tra cứu cơ sở dữ liệu..."):
-                try:
-                    response = call_langchain_agent(
-                        api_key=openai_api_key,
-                        query=prompt,
-                        session_state=st.session_state
-                    )
+            
+            try:
+                response = call_langchain_agent(
+                    api_key=openai_api_key,
+                    query=prompt,
+                    session_state=st.session_state,
+                    status_placeholder=status_placeholder
+                )
+                
+                # Khi Agent trả lời xong, dọn dẹp các thông báo tool và hiển thị nội dung cuối
+                status_placeholder.empty()
+                
+                # Mô phỏng hiệu ứng stream text
+                full_response = ""
+                for chunk in response.split(" "):
+                    full_response += chunk + " "
+                    time.sleep(0.01)
+                    message_placeholder.markdown(full_response + "▌")
+                message_placeholder.markdown(full_response)
                     
-                    # Mô phỏng hiệu ứng stream text
-                    full_response = ""
-                    for chunk in response.split(" "):
-                        full_response += chunk + " "
-                        time.sleep(0.01)
-                        message_placeholder.markdown(full_response + "▌")
-                    message_placeholder.markdown(full_response)
-                        
-                except psycopg2.errors.OperationalError:
-                     st.warning("Hệ thống Database đang khởi động lại (Cold Start)...")
-                     if st.button("Thử lại truy vấn"): st.rerun()
-                     return
+            except psycopg2.errors.OperationalError:
+                 st.warning("Hệ thống Database đang khởi động lại (Cold Start)...")
+                 if st.button("Thử lại truy vấn"): st.rerun()
+                 return
                 
         st.session_state["messages"].append({"role": "assistant", "content": response})
 

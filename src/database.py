@@ -161,6 +161,74 @@ def create_support_ticket(student_id, parent_id, issue, category="general_suppor
     result = _execute_query(query, (ticket_code, parent_id, student_id, category, title, issue, "open"), fetch_one=True, commit=True)
     return result[0] if result else None
 
+def get_teacher_comments(student_id, limit=5):
+    query = """
+    SELECT c.comment_date as date, c.comment_text as comment, t.full_name as teacher_name, sub.subject_name as subject
+    FROM teacher_daily_comments c
+    JOIN teachers t ON c.teacher_id = t.id
+    LEFT JOIN subjects sub ON c.subject_id = sub.id
+    WHERE c.student_id = %s
+    ORDER BY c.comment_date DESC
+    LIMIT %s
+    """
+    rows = _execute_query(query, (student_id, limit))
+    result = []
+    for row in rows:
+        d = dict(row)
+        d['date'] = d['date'].strftime("%Y-%m-%d")
+        result.append(d)
+    return result
+
+def get_teacher_contact_info(class_id):
+    query = """
+    SELECT t.full_name as teacher_name, t.phone, t.email, t.department
+    FROM classes c
+    JOIN teachers t ON c.homeroom_teacher_id = t.id
+    WHERE c.id = %s
+    """
+    row = _execute_query(query, (class_id,), fetch_one=True)
+    return dict(row) if row else {}
+
+def initiate_fee_payment(student_id):
+    query = """
+    SELECT id, fee_name, amount, due_date, status, payment_url, qr_code_url
+    FROM fee_records
+    WHERE student_id = %s AND status IN ('pending', 'overdue')
+    ORDER BY due_date ASC
+    LIMIT 1
+    """
+    row = _execute_query(query, (student_id,), fetch_one=True)
+    if not row:
+        return {"status": "success", "message": "Không có khoản phí nào cần thanh toán."}
+    
+    d = dict(row)
+    d['due_date'] = d['due_date'].strftime("%Y-%m-%d") if d['due_date'] else "N/A"
+    return {
+        "status": "requires_action",
+        "fee_info": d,
+        "payment_instruction": f"Vui lòng thanh toán khoản phí: {d['fee_name']} ({d['amount']} VND).\\nLink thanh toán: {d['payment_url']}\\nHoặc quét mã QR: {d['qr_code_url']}"
+    }
+
+def get_available_meeting_slots(teacher_id=None, date_str=None):
+    from datetime import date
+    date_val = date_str if date_str else date.today().strftime("%Y-%m-%d")
+    return [
+        {"date": date_val, "time": "15:00 - 15:30", "status": "available"},
+        {"date": date_val, "time": "16:00 - 16:30", "status": "available"}
+    ]
+
+def book_teacher_meeting(parent_id, student_id, class_id, date_str, time_str, reason):
+    teacher = get_teacher_contact_info(class_id)
+    teacher_name = teacher.get('teacher_name', 'Giáo viên')
+    
+    description = f"Đặt lịch hẹn: {date_str} lúc {time_str}. Lý do: {reason}"
+    ticket_id = create_support_ticket(student_id, parent_id, description, category="general_support")
+    return {
+        "status": "success",
+        "message": f"Đã gửi yêu cầu đặt lịch hẹn với {teacher_name} vào {date_str} {time_str}. Vui lòng chờ giáo viên xác nhận.",
+        "ticket_id": ticket_id
+    }
+
 def insert_conversation_log(session_id, student_id, parent_id, intent_detected, user_message, ai_response, data_sources, data_timestamps, escalated=False, correction_flagged=False):
     import json
     import uuid
