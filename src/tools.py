@@ -1,65 +1,52 @@
+from langchain_core.tools import tool
 import database
-from datetime import datetime
 
-# ĐỊNH NGHĨA CÁC TOOLS CHO AI AGENT
-# File này chứa logic xử lý nghiệp vụ trung gian giữa Agent và Database
+# ĐỊNH NGHĨA TOOLS THEO CHUẨN LANGCHAIN
+# Các hàm này sẽ được Agent tự động gọi dựa trên câu hỏi của người dùng
 
-def tool_get_student_schedule(class_id, day_of_week=None):
-    """Lấy thời khóa biểu của lớp học."""
+@tool
+def get_student_schedule(class_id: str, day_of_week: str = None):
+    """Tra cứu thời khóa biểu của lớp học. day_of_week có thể là 'Thứ 2' đến 'Thứ 7'."""
     return database.get_schedule(class_id, day_of_week)
 
-def tool_get_student_grades(student_id):
-    """Lấy bảng điểm của học sinh."""
+@tool
+def get_student_grades(student_id: str):
+    """Tra cứu bảng điểm và kết quả học tập của học sinh."""
     return database.get_grades(student_id)
 
-def tool_get_attendance_records(student_id):
-    """Lấy danh sách điểm danh của học sinh."""
+@tool
+def get_attendance_records(student_id: str):
+    """Tra cứu lịch sử điểm danh và sự chuyên cần của học sinh."""
     return database.get_attendance(student_id)
 
-def tool_get_school_announcements(class_id=None):
-    """Lấy các thông báo mới nhất từ nhà trường."""
+@tool
+def get_school_announcements(class_id: str = None):
+    """Lấy các thông báo mới từ nhà trường và giáo viên."""
     return database.get_announcements(class_id)
 
-def tool_get_tuition_status(student_id):
-    """Tra cứu tình trạng học phí."""
+@tool
+def get_tuition_status(student_id: str):
+    """Kiểm tra tình trạng đóng học phí và các khoản phí khác."""
     return database.get_tuition(student_id)
 
-def tool_get_academic_summary(student_id):
-    """Tổng hợp tình hình học tập (Điểm, chuyên cần, nhận xét)."""
+@tool
+def get_academic_summary(student_id: str):
+    """Lấy bản tổng hợp nhận xét của giáo viên và tình hình học tập chung."""
     return database.get_summary_context(student_id)
 
-def tool_report_issue_to_teacher(student_id, parent_id, issue_description, category="general_support"):
-    """Tạo ticket gửi yêu cầu hỗ trợ hoặc báo cáo lỗi thông tin cho giáo viên."""
+@tool
+def report_issue_to_teacher(parent_id: str, student_id: str, issue_description: str, category: str = "general_support"):
+    """Gửi phản hồi, khiếu nại hoặc yêu cầu hỗ trợ tới giáo viên/nhà trường. 
+    Category có thể là: 'wrong_information', 'academic_concern', 'fee_issue', 'general_support'."""
     return database.create_support_ticket(student_id, parent_id, issue_description, category)
 
-# MẪU ĐỊNH NGHĨA JSON CHO OPENAI TOOL CALLING (Nếu bạn muốn nâng cấp sau này)
-AVAILABLE_TOOLS_METADATA = [
-    {
-        "type": "function",
-        "function": {
-            "name": "tool_get_student_schedule",
-            "description": "Tra cứu lịch học/thời khóa biểu của học sinh.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "day_of_week": {"type": "string", "description": "Thứ trong tuần (Thứ 2 - Thứ 7)"}
-                }
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "tool_report_issue_to_teacher",
-            "description": "Báo cáo thông tin sai hoặc gửi khiếu nại tới giáo viên.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "issue_description": {"type": "string", "description": "Nội dung phản hồi"},
-                    "category": {"type": "string", "enum": ["wrong_information", "academic_concern", "fee_issue"]}
-                },
-                "required": ["issue_description"]
-            }
-        }
-    }
+# Danh sách tools để export
+tools = [
+    get_student_schedule,
+    get_student_grades,
+    get_attendance_records,
+    get_school_announcements,
+    get_tuition_status,
+    get_academic_summary,
+    report_issue_to_teacher
 ]

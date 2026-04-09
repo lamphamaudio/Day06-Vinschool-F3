@@ -1,9 +1,11 @@
 import streamlit as st
 import psycopg2.errors
 from database import authenticate_parent, get_student_info
-from agent import call_ai_agent
+from agent_langchain import call_langchain_agent
 import time
 import os
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 st.set_page_config(page_title="Hỗ trợ Phụ huynh - VinSchool/VinUni", page_icon="🏫", layout="centered")
 
@@ -98,7 +100,7 @@ def chat_page():
             message_placeholder = st.empty()
             with st.spinner("Đang tra cứu cơ sở dữ liệu..."):
                 try:
-                    response = call_ai_agent(
+                    response = call_langchain_agent(
                         api_key=st.session_state["api_key"],
                         query=prompt,
                         session_state=st.session_state
