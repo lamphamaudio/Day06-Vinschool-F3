@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 import psycopg2
 from psycopg2.extras import DictCursor
 import psycopg2.pool
@@ -16,9 +16,9 @@ def get_db_pool():
         db_url = os.getenv("DATABASE_URL")
         
     if not db_url:
-        raise ValueError("DATABASE_URL không được tìm thấy")
+        raise ValueError("DATABASE_URL khÃ´ng Ä‘Æ°á»£c tÃ¬m tháº¥y")
         
-    # Tạo pool tối ưu connection timeout
+    # Táº¡o pool tá»‘i Æ°u connection timeout
     # Set search_path to school_ai for all connections in the pool
     return psycopg2.pool.SimpleConnectionPool(1, 10, db_url, connect_timeout=5, options='-c search_path=school_ai,public -c statement_timeout=8000')
 
@@ -51,14 +51,14 @@ def _execute_query(query, params, fetch_one=False, commit=False):
     finally:
          return_connection(conn)
 
-# CÁC HÀM GET DỮ LIỆU ĐÃ CẬP NHẬT THEO SCHEMA school_ai
+# CÃC HÃ€M GET Dá»® LIá»†U ÄÃƒ Cáº¬P NHáº¬T THEO SCHEMA school_ai
 def authenticate_parent(login_identifier, password):
-    # Tìm parent theo email hoặc parent_code (thay cho username)
+    # TÃ¬m parent theo email hoáº·c parent_code (thay cho username)
     query = "SELECT id, full_name FROM parents WHERE (email = %s OR parent_code = %s) AND password_hash = %s"
     parent = _execute_query(query, (login_identifier, login_identifier, password), fetch_one=True)
     
     if parent:
-        # Lấy student_id đầu tiên (mặc định) liên kết với parent này
+        # Láº¥y student_id Ä‘áº§u tiÃªn (máº·c Ä‘á»‹nh) liÃªn káº¿t vá»›i parent nÃ y
         mapping = _execute_query("SELECT student_id FROM parent_student_links WHERE parent_id = %s LIMIT 1", (parent['id'],), fetch_one=True)
         if mapping:
             return {"parent_id": str(parent['id']), "parent_name": parent['full_name'], "student_id": str(mapping['student_id'])}
@@ -76,9 +76,9 @@ def get_student_info(student_id):
 
 def get_schedule(class_id, day_of_week=None):
     # day_of_week mapping from Vietnamese string to SMALLINT (1-7)
-    day_map = {'Thứ 2': 1, 'Thứ 3': 2, 'Thứ 4': 3, 'Thứ 5': 4, 'Thứ 6': 5, 'Thứ 7': 6, 'Chủ Nhật': 7}
+    day_map = {'Thá»© 2': 1, 'Thá»© 3': 2, 'Thá»© 4': 3, 'Thá»© 5': 4, 'Thá»© 6': 5, 'Thá»© 7': 6, 'Chá»§ Nháº­t': 7}
     if not day_of_week: 
-        day_val = 4 # Mock Thứ 5
+        day_val = 4 # Mock Thá»© 5
     else:
         day_val = day_map.get(day_of_week, 4)
 
@@ -127,21 +127,95 @@ def get_attendance(student_id):
     return result
 
 def get_announcements(class_id=None):
-    # Lấy thông báo chung hoặc theo lớp
-    query = "SELECT title, content, published_at as date FROM school_announcements ORDER BY published_at DESC LIMIT 5"
-    rows = _execute_query(query, ())
+    if class_id:
+        query = """
+        SELECT DISTINCT
+            sa.id,
+            sa.title,
+            sa.content,
+            sa.category,
+            sa.audience_scope,
+            sa.published_at AS date,
+            sa.effective_from,
+            sa.effective_to
+        FROM school_announcements sa
+        LEFT JOIN announcement_targets at ON at.announcement_id = sa.id
+        WHERE
+            (
+                sa.audience_scope = 'all'
+                OR at.class_id = %s
+            )
+            AND (sa.effective_from IS NULL OR sa.effective_from <= NOW())
+            AND (sa.effective_to IS NULL OR sa.effective_to >= NOW())
+        ORDER BY sa.published_at DESC
+        LIMIT 5
+        """
+        rows = _execute_query(query, (class_id,))
+    else:
+        query = """
+        SELECT
+            sa.id,
+            sa.title,
+            sa.content,
+            sa.category,
+            sa.audience_scope,
+            sa.published_at AS date,
+            sa.effective_from,
+            sa.effective_to
+        FROM school_announcements sa
+        WHERE
+            sa.audience_scope = 'all'
+            AND (sa.effective_from IS NULL OR sa.effective_from <= NOW())
+            AND (sa.effective_to IS NULL OR sa.effective_to >= NOW())
+        ORDER BY sa.published_at DESC
+        LIMIT 5
+        """
+        rows = _execute_query(query, ())
+
     result = []
     for row in rows:
         d = dict(row)
-        d['date'] = d['date'].isoformat() # Consistent
-        d['link'] = "#" # Placeholder
+        d["id"] = str(d["id"])
+        d["date"] = d["date"].isoformat() if d["date"] else None
+        d["effective_from"] = d["effective_from"].isoformat() if d["effective_from"] else None
+        d["effective_to"] = d["effective_to"].isoformat() if d["effective_to"] else None
+        result.append(d)
+    return result
+def get_parent_notifications(student_id):
+    query = """
+    SELECT
+        id,
+        parent_id,
+        student_id,
+        announcement_id,
+        title,
+        content,
+        category,
+        is_read,
+        delivered_at,
+        read_at
+    FROM parent_notifications
+    WHERE student_id = %s
+    ORDER BY delivered_at DESC
+    LIMIT 10
+    """
+    rows = _execute_query(query, (student_id,))
+    result = []
+    for row in rows:
+        d = dict(row)
+        d["id"] = str(d["id"])
+        d["parent_id"] = str(d["parent_id"]) if d.get("parent_id") else None
+        d["student_id"] = str(d["student_id"]) if d.get("student_id") else None
+        d["announcement_id"] = str(d["announcement_id"]) if d.get("announcement_id") else None
+        d["delivered_at"] = d["delivered_at"].isoformat() if d["delivered_at"] else None
+        d["read_at"] = d["read_at"].isoformat() if d["read_at"] else None
         result.append(d)
     return result
 
 def get_summary_context(student_id):
     grades = get_grades(student_id)
     attendance = get_attendance(student_id)
-    # Lấy thêm comment của giáo viên từ bảng teacher_daily_comments
+    # Láº¥y thÃªm comment cá»§a giÃ¡o viÃªn tá»« báº£ng teacher_daily_comments
     comments_rows = _execute_query("SELECT comment_text as comment, t.full_name as teacher_name FROM teacher_daily_comments c JOIN teachers t ON c.teacher_id = t.id WHERE student_id = %s", (student_id,))
     comments = [dict(row) for row in comments_rows]
     return {"grades": grades, "attendance": attendance, "comments": comments}
@@ -163,7 +237,7 @@ def create_support_ticket(student_id, parent_id, issue, category="general_suppor
     RETURNING id
     """
     ticket_code = f"TK-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    title = f"Hỗ trợ: {issue[:30]}..."
+    title = f"Há»— trá»£: {issue[:30]}..."
     result = _execute_query(query, (ticket_code, parent_id, student_id, category, title, issue, "open"), fetch_one=True, commit=True)
     return result[0] if result else None
 
@@ -171,7 +245,7 @@ def insert_conversation_log(session_id, student_id, parent_id, intent_detected, 
     import json
     import uuid
     
-    # Chuẩn hóa session_id thành UUID
+    # Chuáº©n hÃ³a session_id thÃ nh UUID
     try:
         uuid.UUID(str(session_id))
         final_session_id = str(session_id)
@@ -182,7 +256,7 @@ def insert_conversation_log(session_id, student_id, parent_id, intent_detected, 
     try:
         cursor = conn.cursor()
         
-        # 1. Đảm bảo session tồn tại trong chat_sessions (vì có khóa ngoại)
+        # 1. Äáº£m báº£o session tá»“n táº¡i trong chat_sessions (vÃ¬ cÃ³ khÃ³a ngoáº¡i)
         cursor.execute("SELECT id FROM chat_sessions WHERE id = %s", (final_session_id,))
         if not cursor.fetchone():
             cursor.execute(
@@ -190,7 +264,7 @@ def insert_conversation_log(session_id, student_id, parent_id, intent_detected, 
                 (final_session_id, parent_id, student_id)
             )
             
-        # 2. Log vào ai_audit_logs
+        # 2. Log vÃ o ai_audit_logs
         query = """
         INSERT INTO ai_audit_logs (session_id, parent_id, student_id, question_text, answer_text, intent_name, data_sources, was_escalated)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
@@ -204,3 +278,4 @@ def insert_conversation_log(session_id, student_id, parent_id, intent_detected, 
         print(f"Log Error: {e}")
     finally:
         return_connection(conn)
+

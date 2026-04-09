@@ -1,65 +1,162 @@
-import database
-from datetime import datetime
+from langchain_core.tools import tool
 
-# ĐỊNH NGHĨA CÁC TOOLS CHO AI AGENT
-# File này chứa logic xử lý nghiệp vụ trung gian giữa Agent và Database
+import database
+
 
 def tool_get_student_schedule(class_id, day_of_week=None):
-    """Lấy thời khóa biểu của lớp học."""
+    """Lay thoi khoa bieu cua lop hoc."""
     return database.get_schedule(class_id, day_of_week)
 
+
 def tool_get_student_grades(student_id):
-    """Lấy bảng điểm của học sinh."""
+    """Lay bang diem cua hoc sinh."""
     return database.get_grades(student_id)
 
+
 def tool_get_attendance_records(student_id):
-    """Lấy danh sách điểm danh của học sinh."""
+    """Lay danh sach diem danh cua hoc sinh."""
     return database.get_attendance(student_id)
 
-def tool_get_school_announcements(class_id=None):
-    """Lấy các thông báo mới nhất từ nhà trường."""
-    return database.get_announcements(class_id)
+
+@tool
+def tool_get_school_announcements(class_id: str = "") -> str:
+    """
+    Lay cac thong bao moi nhat tu nha truong.
+    Tham so:
+    - class_id: ID lop hoc. Co the bo trong neu muon lay thong bao chung toan truong.
+    Tra ve danh sach thong bao moi nhat phu hop voi lop hoac toan truong.
+    """
+    announcements = database.get_announcements(class_id or None)
+
+    if not announcements:
+        return "Khong co thong bao nao phu hop."
+
+    lines = ["Thong bao nha truong moi nhat:"]
+    lines.extend(
+        f"{idx}. {item['title']} | Loai: {item.get('category', 'general')} | "
+        f"Ngay dang: {item['date']} | Noi dung: {item['content']}"
+        for idx, item in enumerate(announcements, 1)
+    )
+    return "\n".join(lines)
+
+
+@tool
+def tool_get_parent_notifications(student_id: str) -> str:
+    """
+    Lay thong bao danh cho phu huynh.
+    Tham so:
+    - student_id: ID hoc sinh can lay thong bao da gui cho phu huynh.
+    Tra ve cac thong bao moi nhat ma phu huynh can theo doi.
+    """
+    notifications = database.get_parent_notifications(student_id)
+
+    if not notifications:
+        return "Hien tai khong co thong bao nao danh cho phu huynh."
+
+    lines = ["Thong bao gui cho phu huynh:"]
+    lines.extend(
+        f"{idx}. {item['title']} | Loai: {item.get('category', 'general')} | "
+        f"Thoi gian gui: {item['delivered_at']} | "
+        f"Trang thai: {'Da doc' if item['is_read'] else 'Chua doc'} | "
+        f"Noi dung: {item['content']}"
+        for idx, item in enumerate(notifications, 1)
+    )
+    return "\n".join(lines)
+
 
 def tool_get_tuition_status(student_id):
-    """Tra cứu tình trạng học phí."""
+    """Tra cuu tinh trang hoc phi."""
     return database.get_tuition(student_id)
 
+
 def tool_get_academic_summary(student_id):
-    """Tổng hợp tình hình học tập (Điểm, chuyên cần, nhận xét)."""
+    """Tong hop tinh hinh hoc tap (Diem, chuyen can, nhan xet)."""
     return database.get_summary_context(student_id)
 
-def tool_report_issue_to_teacher(student_id, parent_id, issue_description, category="general_support"):
-    """Tạo ticket gửi yêu cầu hỗ trợ hoặc báo cáo lỗi thông tin cho giáo viên."""
-    return database.create_support_ticket(student_id, parent_id, issue_description, category)
 
-# MẪU ĐỊNH NGHĨA JSON CHO OPENAI TOOL CALLING (Nếu bạn muốn nâng cấp sau này)
+def tool_report_issue_to_teacher(
+    student_id, parent_id, issue_description, category="general_support"
+):
+    """Tao ticket gui yeu cau ho tro hoac bao cao loi thong tin cho giao vien."""
+    return database.create_support_ticket(
+        student_id, parent_id, issue_description, category
+    )
+
+
+def tool_get_teacher_contact_info(teacher_id):
+    """Lay thong tin lien he cua giao vien."""
+    return database.get_teacher_contact(teacher_id)
+
+
 AVAILABLE_TOOLS_METADATA = [
     {
         "type": "function",
         "function": {
             "name": "tool_get_student_schedule",
-            "description": "Tra cứu lịch học/thời khóa biểu của học sinh.",
+            "description": "Tra cuu lich hoc/thoi khoa bieu cua hoc sinh.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "day_of_week": {"type": "string", "description": "Thứ trong tuần (Thứ 2 - Thứ 7)"}
-                }
-            }
-        }
+                    "day_of_week": {
+                        "type": "string",
+                        "description": "Thu trong tuan (Thu 2 - Thu 7)",
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tool_get_school_announcements",
+            "description": "Lay thong bao nha truong theo lop hoc hoac toan truong.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "class_id": {
+                        "type": "string",
+                        "description": "ID lop hoc, co the bo trong de lay thong bao chung toan truong.",
+                    }
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tool_get_parent_notifications",
+            "description": "Lay cac notification da gui cho phu huynh theo student_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "student_id": {
+                        "type": "string",
+                        "description": "ID hoc sinh can lay thong bao da gui cho phu huynh.",
+                    }
+                },
+                "required": ["student_id"],
+            },
+        },
     },
     {
         "type": "function",
         "function": {
             "name": "tool_report_issue_to_teacher",
-            "description": "Báo cáo thông tin sai hoặc gửi khiếu nại tới giáo viên.",
+            "description": "Bao cao thong tin sai hoac gui khieu nai toi giao vien.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "issue_description": {"type": "string", "description": "Nội dung phản hồi"},
-                    "category": {"type": "string", "enum": ["wrong_information", "academic_concern", "fee_issue"]}
+                    "issue_description": {
+                        "type": "string",
+                        "description": "Noi dung phan hoi",
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": ["wrong_information", "academic_concern", "fee_issue"],
+                    },
                 },
-                "required": ["issue_description"]
-            }
-        }
-    }
+                "required": ["issue_description"],
+            },
+        },
+    },
 ]
